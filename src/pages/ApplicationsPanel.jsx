@@ -147,7 +147,7 @@ export default function ApplicationsPanel({ user }) {
             <label htmlFor="to-app-runtime">Runtime</label>
             <input id="to-app-runtime" disabled value="Node.js" readOnly/>
             <label htmlFor="to-app-environment">Environment</label>
-            <select id="to-app-environment" value={environment} onChange={e => setEnvironment(e.target.value}><option value="development">Development</option><option value="staging">Staging</option><option value="production">Production</option></select>
+            <select id="to-app-environment" value={environment} onChange={e => setEnvironment(e.target.value)}><option value="development">Development</option><option value="staging">Staging</option><option value="production">Production</option></select>
             <button className="ws-primary" type="submit" disabled={busy === 'create'}><PlusCircle size={17}/>{busy === 'create' ? 'Creating…' : 'Create application'}</button>
           </form>
           {apps.length > 0 && <div className="to-app-existing"><strong>Your applications</strong>{apps.map(app => <button key={app.id} type="button" onClick={() => choose(app.id)} aria-pressed={selectedId === app.id} className={selectedId === app.id ? 'to-app-selected' : ''}><span>{app.name}<small>{app.environment}</small></span>{selectedId === app.id && <CheckCircle2 size={17}/>}</button>)}</div>}
