@@ -7,7 +7,7 @@ import './Workspace.css'
 const navigation = [
   ['Overview', LayoutDashboard], ['Applications', Network], ['Log Explorer', Terminal],
   ['Dashboards', Gauge], ['Saved Searches', Bookmark], ['Alerts', Bell],
-  ['Investigations', FileSearch], ['Team', Users], ['Settings', Settings],
+  ['Investigations', FileSearch], ['T.O. Splunk Studio', BookOpen, 'https://www.to-analytics.com/splunk-studio'], ['Team', Users], ['Settings', Settings],
 ]
 const milestones = [
   ['Create workspace', 'Your signed-in workspace preview', 'Done'],
@@ -74,7 +74,9 @@ function WorkspaceDashboard({ user }) {
     try { await logout() } catch (err) { setLogoutError(err.message) } finally { setBusy(false) }
   }
   const avatar = <span className="ws-avatar" aria-hidden="true">{initials}</span>
-  const navItems = navigation.map(([label, Icon]) => <button key={label} onClick={() => selectPage(label)} aria-current={active === label ? 'page' : undefined} className={active === label ? 'selected' : ''}><Icon size={20}/><span>{label}</span>{label === 'Team' && <small>Personal</small>}</button>)
+  const navItems = navigation.map(([label, Icon, href]) => href
+    ? <a key={label} href={href}><Icon size={20}/><span>{label}</span></a>
+    : <button key={label} onClick={() => selectPage(label)} aria-current={active === label ? 'page' : undefined} className={active === label ? 'selected' : ''}><Icon size={20}/><span>{label}</span>{label === 'Team' && <small>Personal</small>}</button>)
   return <div className="workspace-shell">
     <a href="#workspace-main" className="ws-skip">Skip to workspace</a>
     <header className="ws-header">
