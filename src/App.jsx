@@ -42,6 +42,7 @@ const NAV = [
   { label: 'How it works', href: '#how-it-works' },
   { label: 'Solutions', href: '#solutions' },
   { label: 'Security', href: '#security' },
+  {label:"Docs ", href: "/docs"}
 ]
 
 const CHARTS = {

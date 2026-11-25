@@ -9,7 +9,7 @@ info:
     signed-in user session. OTLP ingestion uses a separate, send-only project secret.
     OTLP/HTTP JSON traces are supported in v1; protobuf, metrics, and logs are not.
 servers:
-  - url: https://YOUR-RENDER-API
+  - url: https://to-backendapi-v1-kctb.onrender.com
     description: Replace with your actual Render API hostname
 security: []
 tags:
