@@ -41,6 +41,10 @@ paths:
                 required:
                   - projects
                 properties:
+                  total:
+                    type: [integer, 'null']
+                    minimum: 0
+                    description: Exact count of projects owned by the verified user, independent of the 100-row list limit.
                   projects:
                     type: array
                     items:

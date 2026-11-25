@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, CheckCircle2, ClipboardCopy, CloudUpload, KeyRound, PlusCircle, RefreshCw, ShieldCheck, Terminal, TriangleAlert } from 'lucide-react'
 import './ApplicationsPanel.css'
-import { authRequest } from '../lib/authApi'
+import { monitoringRequest } from '../lib/monitoringApi.js'
 import { envSnippet, powershellSnippet, OTEL_INSTALL, OTEL_START } from '../lib/otelSetup'
 
-const API_ROOT = (import.meta.env.VITE_MONITORING_API_BASE_URL || '/api/monitoring').replace(/\/$/, '')
-
 // Share the existing HttpOnly session and CSRF lifecycle used by sign-in.
-const request = (_user, path, options = {}) => authRequest(path, { ...options, baseUrl: API_ROOT })
+const request = (_user, path, options = {}) => monitoringRequest(path, options)
 
 function Snippet({ title, code, disabled = false }) {
   const [copied, setCopied] = useState(false)
@@ -30,58 +28,46 @@ function friendlyDate(value) {
   return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString()
 }
 
-export default function ApplicationsPanel({ user }) {
-  const [apps, setApps] = useState([])
+export default function ApplicationsPanel({ user, projectStore, projectState }) {
+  const apps = projectState.projects
+  const loading = projectState.loading
   const [selectedId, setSelectedId] = useState(null)
   const [name, setName] = useState('Shopping API')
   const [environment, setEnvironment] = useState('development')
   const [newSecret, setNewSecret] = useState('')
   const [showSecret, setShowSecret] = useState(false)
   const [state, setState] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [statusError, setStatusError] = useState(null)
   const [keys, setKeys] = useState([])
   const selection = useRef(null)
 
-  const selected = apps.find(app => app.id === selectedId) || null
+  const currentId = apps.some(app => app.id === selectedId) ? selectedId : apps[0]?.id || null
+  const selected = apps.find(app => app.id === currentId) || null
   const hasIngest = Boolean(selected?.ingest_url)
-
-  const load = useCallback(async () => {
-    try {
-      const result = await request(user, '/projects')
-      const list = result.projects || []
-      setApps(list)
-      setSelectedId(old => old && list.some(a => a.id === old) ? old : list[0]?.id || null)
-      setError('')
-    } catch (err) {
-      setError(err.message)
-    } finally { setLoading(false) }
-  }, [user])
-
-  useEffect(() => { void load() }, [load])
 
   const checkStatus = useCallback(async (projectId) => {
     try {
       const next = await request(user, `/projects/${encodeURIComponent(projectId)}/status`)
       if (selection.current !== projectId) return
       setState({ ...next, projectId })
+      projectStore.noteStatus(projectId, next)
       setStatusError(null)
-    } catch (err) { if (selection.current === projectId) setStatusError({ projectId, message: err.message }) }
-  }, [user])
+    } catch (err) { if (selection.current === projectId) { setStatusError({ projectId, message: err.message }); projectStore.noteStatusError(projectId, err.message) } }
+  }, [user, projectStore])
 
   useEffect(() => {
-    selection.current = selectedId
-    if (!selectedId) return undefined
-    void checkStatus(selectedId)
+    selection.current = currentId
+    if (!currentId) return undefined
+    void checkStatus(currentId)
     let cancelled = false
-    request(user, `/projects/${encodeURIComponent(selectedId)}/keys`).then(result => {
+    request(user, `/projects/${encodeURIComponent(currentId)}/keys`).then(result => {
       if (!cancelled) setKeys(result.keys)
     }).catch(err => { if (!cancelled) setError(err.message) })
-    const handle = setInterval(() => void checkStatus(selectedId), 15000)
+    const handle = setInterval(() => void checkStatus(currentId), 15000)
     return () => { cancelled = true; selection.current = null; clearInterval(handle) }
-  }, [selectedId, checkStatus, user])
+  }, [currentId, checkStatus, user])
 
   async function createProject(e) {
     e.preventDefault()
@@ -92,7 +78,7 @@ export default function ApplicationsPanel({ user }) {
         method: 'POST',
         body: { name: name.trim(), runtime: 'nodejs', environment },
       })
-      setApps(old => [created.project, ...old])
+      projectStore.addProject(created.project)
       setSelectedId(created.project.id)
       setNewSecret('')
       setShowSecret(false)
@@ -142,12 +128,13 @@ export default function ApplicationsPanel({ user }) {
   }
   const setup = { name: selected?.name || 'shopping-api', endpoint: selected?.ingest_url, secret: newSecret || 'YOUR_PROJECT_SECRET' }
   const envText = envSnippet(setup)
-  const currentStatus = state?.projectId === selectedId ? state : null
-  const connectionError = statusError?.projectId === selectedId ? statusError.message : ''
+  const currentStatus = state?.projectId === currentId ? state : null
+  const connectionError = statusError?.projectId === currentId ? statusError.message : ''
 
   return <div className="to-app-panel">
     <header className="to-app-heading"><div><span className="ws-badge ws-purple">OpenTelemetry • Node.js</span><h1>Applications</h1><p>Connect your existing backend without uploading its source code.</p></div><Activity size={29}/></header>
     {error && <div className="to-app-error" role="alert"><TriangleAlert size={18}/><span>{error}</span></div>}
+    {projectState.error && <div className="to-app-error" role="alert"><span>{projectState.error}</span><button className="ws-secondary" onClick={projectStore.refresh}>Retry applications</button></div>}
     {loading ? <section className="ws-card to-app-card">Loading your applications…</section> : <>
       <div className="to-app-layout">
         <section className="ws-card to-app-card">
@@ -162,7 +149,7 @@ export default function ApplicationsPanel({ user }) {
             <select id="to-app-environment" value={environment} onChange={e => setEnvironment(e.target.value)}><option value="development">Development</option><option value="staging">Staging</option><option value="production">Production</option></select>
             <button className="ws-primary" type="submit" disabled={busy === 'create'}><PlusCircle size={17}/>{busy === 'create' ? 'Creating…' : 'Create application'}</button>
           </form>
-          {apps.length > 0 && <div className="to-app-existing"><strong>Your applications</strong>{apps.map(app => <button key={app.id} type="button" onClick={() => choose(app.id)} aria-pressed={selectedId === app.id} className={selectedId === app.id ? 'to-app-selected' : ''}><span>{app.name}<small>{app.environment}</small></span>{selectedId === app.id && <CheckCircle2 size={17}/>}</button>)}</div>}
+          {apps.length > 0 && <div className="to-app-existing"><strong>Your applications</strong>{apps.map(app => <button key={app.id} type="button" onClick={() => choose(app.id)} aria-pressed={currentId === app.id} className={currentId === app.id ? 'to-app-selected' : ''}><span>{app.name}<small>{app.environment}</small></span>{currentId === app.id && <CheckCircle2 size={17}/>}</button>)}</div>}
         </section>
         <div className="to-app-details">
           {selected ? <>

@@ -4,3 +4,10 @@
 @media(max-width:1023px){.ws-desktop-sidebar{display:none}.ws-main{margin-left:0;padding-top:88px}.ws-header{padding-left:12px;padding-right:12px}}
 @media(max-width:640px){.workspace-shell h1{font-size:24px;line-height:32px}.ws-header{gap:4px;padding-left:8px;padding-right:8px}.ws-header-brand,.ws-header-actions{gap:2px}.ws-header-brand img{width:83px;height:30px}.ws-workspace-pill{max-width:126px;font-size:10px;padding:6px}.ws-workspace-pill>svg:last-child{display:none}.ws-main{padding:calc(80px + env(safe-area-inset-top,0px)) 16px calc(20px + env(safe-area-inset-bottom,0px))}.ws-welcome{padding:20px}.ws-welcome p{font-size:14px}.ws-metrics{grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}.ws-metric{padding:14px}.ws-metric>div{margin-bottom:10px}.ws-content-grid{grid-template-columns:1fr}.ws-card{border-radius:15px}.ws-milestone{gap:10px;padding:12px 10px}.ws-milestone .ws-badge{font-size:9px;padding:4px 7px}.ws-section-heading{flex-wrap:nowrap}.ws-section-heading>.ws-badge{font-size:9px}.ws-section-page{padding:24px}.ws-footer{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.workspace-shell *{scroll-behavior:auto;transition:none}}
+
+.ws-overview-refresh { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:16px 0 22px; color:#746b82; font-size:12px; }
+.ws-overview-footnote { color:#746b82; font-size:12px; line-height:1.7; margin:18px 0 0; }
+.ws-milestone.planned { opacity:.75; }
+.ws-overview-refresh .ws-secondary { flex-shrink:0; }
+@media(max-width:600px) { .ws-overview-refresh { align-items:flex-start; } }
+.ws-metric-personal > strong { font-size:24px; }
