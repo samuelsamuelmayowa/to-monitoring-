@@ -8,3 +8,5 @@
 .api-docs :is(.docs-sidebar-note p, .docs-base small) { font-weight: 600; }
 .api-docs .swagger-ui :is(p, td, label, .opblock-summary-description, .opblock-tag small, .parameter__type, .model) { font-weight: 600; }
 .api-docs :is(code, pre) { font-weight: 500; }
+.docs-brand-logo { display: block; width: 125px; height: 44px; object-fit: contain; }
+@media (max-width: 720px) { .docs-brand-logo { width: 86px; height: 34px; } .docs-brand { gap: 8px; font-size: 13px; } }

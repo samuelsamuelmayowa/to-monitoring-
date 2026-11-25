@@ -16,6 +16,18 @@ backend with development cookie settings for HTTP localhost.
 Port 5173 is strict because it is already in the backend's trusted origins.
 Stop another app using that port before starting Monitoring.
 
+### Account database unavailable
+
+The backend loads `to-backendapi-v1/.env` regardless of the launch directory.
+Set `DATABASE_URL` to the MongoDB account database connection string, then restart
+the backend. A `users.findOne()` buffering timeout means the database did not
+connect; changing your password will not resolve it. For `mongodb+srv` URLs,
+your network must resolve the cluster's DNS SRV records and reach MongoDB.
+Check VPN/firewall/DNS settings and the Atlas project's IP access list when
+connections fail. Authentication waits briefly for the database and returns
+HTTP 503 with `Retry-After: 5` while it is unavailable; later requests retry
+failed connections. Never put the database URL in frontend environment variables.
+
 ## Production
 
 `vercel.json` forwards `/api` to the same Render backend configured by Analytics

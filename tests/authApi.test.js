@@ -27,5 +27,13 @@ test('cookie session contract and CSRF lifecycle', async () => {
     await assert.rejects(authRequest('/login', { method: 'POST' }), /Invalid credentials/)
     globalThis.fetch = async () => new Response('<html>Wrong proxy</html>')
     await assert.rejects(authRequest('/session'), /invalid response/)
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, '/api/monitoring/projects')
+      assert.equal(options.headers['X-CSRF-Token'], undefined)
+      return new Response(JSON.stringify({ error: 'Monitoring storage is not ready.' }), { status: 503 })
+    }
+    await assert.rejects(authRequest('/projects', { baseUrl: '/api/monitoring' }), /Monitoring storage is not ready/)
+    globalThis.fetch = async () => new Response(null, { status: 204 })
+    assert.equal(await authRequest('/monitoring/projects/id/keys/key', { method: 'DELETE' }), null)
   } finally { globalThis.fetch = originalFetch; clearCsrfToken() }
 })
