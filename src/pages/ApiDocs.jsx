@@ -1,18 +1,47 @@
-import SwaggerUI from "swagger-ui-react";
-import "swagger-ui-react/swagger-ui.css";
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, ArrowUpRight, BookOpen, Check, Copy, Download, Layers, Menu, Terminal, X } from 'lucide-react';
+import SwaggerUI from 'swagger-ui-react';
+import 'swagger-ui-react/swagger-ui.css';
+import './ApiDocs.css';
+
+const base = 'https://to-backendapi-v1-kctb.onrender.com';
+const sections = [['overview', 'Overview'], ['quickstart', 'Quickstart'], ['authentication', 'Authentication'], ['reference', 'API reference'], ['errors', 'Errors & limits']];
+const projectExample = `curl --request POST '${base}/api/monitoring/projects' \\\n  --header 'Authorization: Bearer YOUR_LOGIN_TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --data '{"name":"Shopping API","runtime":"nodejs","environment":"development"}'`;
+const keyExample = `curl --request POST '${base}/api/monitoring/projects/PROJECT_ID/keys' \\\n  --header 'Authorization: Bearer YOUR_LOGIN_TOKEN'`;
+const environmentExample = `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${base}/otlp/v1/traces
+OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json
+OTEL_EXPORTER_OTLP_TRACES_HEADERS=x-to-project-key=YOUR_PROJECT_SECRET
+OTEL_SERVICE_NAME=shopping-api`;
+
+function CodeBlock({ title, code }) {
+  const [status, setStatus] = useState('');
+  useEffect(() => { if (!status) return; const timer = setTimeout(() => setStatus(''), 2500); return () => clearTimeout(timer); }, [status]);
+  async function copy() {
+    try { await navigator.clipboard.writeText(code); setStatus('Copied'); }
+    catch { setStatus('Select and copy the code below'); }
+  }
+  return <div className="docs-code"><div className="docs-code-bar"><span><Terminal size={14} />{title}</span><button type="button" onClick={copy} aria-label={`Copy ${title}`}>{status === 'Copied' ? <Check size={14} /> : <Copy size={14} />}<span aria-live="polite">{status || 'Copy'}</span></button></div><pre><code>{code}</code></pre></div>;
+}
 
 export default function ApiDocs() {
-  return (
-    <main style={{ padding: "24px" }}>
-      <h1>T.O. Monitoring API Documentation</h1>
-      <p>
-        Connect your application using OpenTelemetry.
-      </p>
-
-      <SwaggerUI
-        url="/openapi.yaml"
-        supportedSubmitMethods={[]}
-      />
-    </main>
-  );
+  const [active, setActive] = useState('overview');
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => { entries.forEach(entry => { if (entry.isIntersecting) setActive(entry.target.id); }); }, { rootMargin: '-15% 0px -65% 0px' });
+    sections.forEach(([id]) => { const element = document.getElementById(id); if (element) observer.observe(element); });
+    return () => observer.disconnect();
+  }, []);
+  return <div className="api-docs">
+    <a className="skip-link" href="#docs-content">Skip to documentation</a>
+    <header className="docs-header"><Link to="/" className="docs-brand"><span className="docs-brand-icon"><Layers size={22} /></span><span>T.O. <strong>Monitoring</strong></span></Link><span className="docs-header-label">Developer docs</span><div className="docs-header-actions"><a href="/openapi.yaml" download className="docs-spec-link"><Download size={15} />OpenAPI spec</a><Link to="/workspace" className="docs-dashboard">Open workspace <ArrowUpRight size={15} /></Link><button className="docs-menu" type="button" aria-label="Toggle documentation navigation" aria-expanded={menuOpen} aria-controls="docs-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={21} /> : <Menu size={21} />}</button></div></header>
+    <div className="docs-layout"><aside className={`docs-sidebar ${menuOpen ? 'is-open' : ''}`} id="docs-navigation"><div className="docs-sidebar-title"><BookOpen size={17} /> Documentation <span>v1</span></div><p className="docs-nav-label">BUILD WITH T.O.</p><nav aria-label="Documentation sections">{sections.map(([id, label]) => <a key={id} href={`#${id}`} aria-current={active === id ? 'location' : undefined} className={active === id ? 'is-active' : ''} onClick={() => { setActive(id); setMenuOpen(false); }}>{label}</a>)}</nav><div className="docs-sidebar-note"><span className="docs-dot" />Pilot API<p>Version 1.0.0-pilot<br />OTLP/HTTP · JSON traces</p><a href="/openapi.yaml" download>Download API contract ↗</a></div><Link to="/" className="docs-back">← Back to website</Link></aside>
+      <main id="docs-content" className="docs-content"><div className="docs-breadcrumb">Documentation / API & integrations</div>
+        <section id="overview" className="docs-section docs-intro"><div className="docs-eyebrow"><span className="docs-dot" /> DEVELOPER PLATFORM</div><h1>Your application.<br /><span>A clearer picture.</span></h1><p className="docs-lead">Connect your Node.js application, send OpenTelemetry traces, and bring your HTTP requests into focus.</p><div className="docs-intro-actions"><a className="docs-primary" href="#quickstart">Start building <ArrowRight size={16} /></a><a className="docs-secondary" href="#reference">Explore API reference ↗</a></div><div className="docs-facts"><span>✓ REST API</span><span>✓ OpenAPI 3.1</span><span>✓ OTLP/HTTP JSON</span></div><div className="docs-notice"><strong>Pilot API contract</strong><p>This documentation describes the proposed pilot API. Confirm endpoint availability and your API hostname before integrating. Metrics, logs, protobuf, and gRPC are outside this version.</p></div><div className="docs-base"><span>BASE URL <small>Contract server</small></span><code>{base}</code></div></section>
+        <section id="quickstart" className="docs-section"><p className="docs-eyebrow">GET CONNECTED</p><h2>From project to first trace</h2><p className="docs-description">Use your verified login token to create a project, then issue a separate key for your server to send traces.</p><div className="docs-step"><span>1</span><div><h3>Register your application</h3><p>Create a Node.js project. Save the returned <code>project.id</code> for the next request.</p></div></div><CodeBlock title="Terminal · Create project" code={projectExample} /><div className="docs-step"><span>2</span><div><h3>Create an ingestion key</h3><p>Replace <code>PROJECT_ID</code> with your project ID. Save the returned <code>secret</code> securely; it is shown only once.</p></div></div><CodeBlock title="Terminal · Create key" code={keyExample} /><div className="docs-step"><span>3</span><div><h3>Configure your trace exporter</h3><p>Set these variables in your server environment. Your OpenTelemetry SDK must support OTLP/HTTP JSON and initialize before your application. These variables alone do not install instrumentation.</p></div></div><CodeBlock title="Server environment" code={environmentExample} /><div className="docs-tip"><strong>Check the connection</strong><p>Generate an HTTP request in your instrumented app, then query <code>GET /api/monitoring/projects/PROJECT_ID/status</code> with your login token. <code>connected: true</code> means a trace arrived within the last 10 minutes.</p></div></section>
+        <section id="authentication" className="docs-section"><p className="docs-eyebrow">ACCESS & SECURITY</p><h2>Two credentials. Clear boundaries.</h2><p className="docs-description">Management requests and trace ingestion use separate credentials.</p><div className="docs-auth-grid"><article><h3>User session</h3><p>Create projects, manage keys, and read your project telemetry using a verified login token.</p><code>Authorization: Bearer YOUR_LOGIN_TOKEN</code><small>Used by /api/monitoring/*</small></article><article><h3>Project ingestion key</h3><p>A send-only secret scoped to a project. Keep it on your server and revoke it if exposed.</p><code>x-to-project-key: YOUR_PROJECT_SECRET</code><small>Used by POST /otlp/v1/traces</small></article></div></section>
+        <section id="reference" className="docs-section docs-reference"><p className="docs-eyebrow">THE API CONTRACT</p><h2>Endpoint reference</h2><p className="docs-description">Explore parameters, authentication requirements, and response schemas. Requests are disabled for this pilot reference.</p><SwaggerUI url="/openapi.yaml" supportedSubmitMethods={[]} filter docExpansion="list" defaultModelsExpandDepth={-1} persistAuthorization={false} /></section>
+        <section id="errors" className="docs-section"><p className="docs-eyebrow">TROUBLESHOOTING</p><h2>Errors & ingestion limits</h2><p className="docs-description">Error responses use a JSON object with an <code>error</code> message. Check each endpoint above for its supported responses.</p><div className="docs-table-wrap"><table><caption>API error responses</caption><thead><tr><th>Status</th><th>Meaning</th><th>What to check</th></tr></thead><tbody>{[['400', 'Invalid request', 'Validate your body and required fields.'], ['401', 'Unauthorized', 'Check the required token or project key.'], ['404', 'Project not found', 'Verify the project ID and ownership.'], ['409', 'Conflict', 'Review active keys before creating another.'], ['413', 'Payload too large', 'Stay within 256 KB and 100 input spans per request.'], ['415', 'Unsupported media type', 'Send OTLP/HTTP JSON, not binary protobuf.'], ['429', 'Quota reached', 'Respect Retry-After; limit is 600 stored spans/project/minute.'], ['501', 'Not available', 'Logs and metrics ingestion are not enabled in v1.']].map(([status, meaning, help]) => <tr key={status}><td><code>{status}</code></td><td>{meaning}</td><td>{help}</td></tr>)}</tbody></table></div><p className="docs-footnote">The pilot stores eligible HTTP SERVER spans with whitelisted fields. A successful ingestion response does not mean every input span was stored.</p></section>
+        <footer className="docs-footer"><span>T.O. Monitoring · Developer documentation</span><a href="/openapi.yaml" download>OpenAPI 3.1 contract ↓</a></footer>
+      </main></div></div>;
 }

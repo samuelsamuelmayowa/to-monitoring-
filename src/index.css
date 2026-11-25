@@ -346,3 +346,6 @@ button { cursor: pointer; }
   .footer-bottom { flex-direction: column; gap: 9px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Documentation entry in desktop and mobile navigation. */
+.nav-links .nav-docs-link, .mobile-menu .nav-docs-link { color: #6b35d9; font-weight: 800; }

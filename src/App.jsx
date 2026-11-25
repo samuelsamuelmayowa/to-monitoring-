@@ -42,7 +42,7 @@ const NAV = [
   { label: 'How it works', href: '#how-it-works' },
   { label: 'Solutions', href: '#solutions' },
   { label: 'Security', href: '#security' },
-  {label:"Docs ", href: "/docs"}
+  { label: 'Docs', href: '/docs' },
 ]
 
 const CHARTS = {
@@ -106,7 +106,7 @@ function Navbar() {
       <div className="container navbar">
         <Brand />
         <nav className="nav-links" aria-label="Main navigation">
-          {NAV.map(item => <a href={item.href} key={item.href}>{item.label}</a>)}
+          {NAV.map(item => <a href={item.href} key={item.href} className={item.href === '/docs' ? 'nav-docs-link' : undefined}>{item.label}</a>)}
         </nav>
         <div className="nav-actions">
           <a className="nav-home" href="https://www.to-analytics.com/" target="_blank" rel="noreferrer">T.O. Analytics <ArrowUpRight size={14} /></a>
@@ -119,7 +119,7 @@ function Navbar() {
       </div>
       {open && (
         <nav className="mobile-menu" aria-label="Mobile navigation">
-          {NAV.map(item => <a href={item.href} key={item.href} onClick={() => setOpen(false)}>{item.label}<ChevronRight size={18} /></a>)}
+          {NAV.map(item => <a href={item.href} key={item.href} className={item.href === '/docs' ? 'nav-docs-link' : undefined} onClick={() => setOpen(false)}>{item.label}<ChevronRight size={18} /></a>)}
           <a href="/login" onClick={() => setOpen(false)}>Sign in <ArrowRight size={18}/></a>
           <a href="/signup" onClick={() => setOpen(false)}>Get started <ArrowRight size={18}/></a>
           <a href="https://www.to-analytics.com/" target="_blank" rel="noreferrer">Visit T.O. Analytics <ArrowUpRight size={18}/></a>
