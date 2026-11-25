@@ -1,0 +1,283 @@
+openapi: 3.1.0
+info:
+  title: T.O. Monitoring API
+  version: 1.0.0-pilot
+  summary: Personal-project management and OpenTelemetry HTTP trace ingestion
+  description: |
+    This is the proposed API contract for the initial implementation, not a statement
+    that endpoints are currently deployed. Project management calls require a verified
+    signed-in user session. OTLP ingestion uses a separate, send-only project secret.
+    OTLP/HTTP JSON traces are supported in v1; protobuf, metrics, and logs are not.
+servers:
+  - url: https://YOUR-RENDER-API
+    description: Replace with your actual Render API hostname
+security: []
+tags:
+  - name: Projects
+    description: Authenticated project management
+  - name: Credentials
+    description: Ingestion-only secrets; never expose to public React code
+  - name: Telemetry
+    description: Private project trace queries
+  - name: OTLP
+    description: Standard OpenTelemetry OTLP/HTTP JSON ingestion
+paths:
+  /api/monitoring/projects:
+    get:
+      tags: [Projects]
+      summary: List current user's projects
+      security: [{ userSession: [] }]
+      responses:
+        '200':
+          description: Projects belonging to the verified user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Projects]
+      summary: Register Node.js application
+      security: [{ userSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, runtime, environment]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80, example: Shopping API }
+                runtime: { type: string, enum: [nodejs] }
+                environment: { type: string, enum: [development, staging, production] }
+      responses:
+        '201':
+          description: Created project
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project]
+                properties:
+                  project: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/monitoring/projects/{id}/keys:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Credentials]
+      summary: List key metadata, never full secrets
+      security: [{ userSession: [] }]
+      responses:
+        '200':
+          description: Key records, without secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items: { $ref: '#/components/schemas/KeyMetadata' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Credentials]
+      summary: Create send-only ingestion key (one-time secret)
+      security: [{ userSession: [] }]
+      responses:
+        '201':
+          description: Secret returned ONCE, and only to authorized owner
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, key]
+                properties:
+                  secret: { type: string, example: 'to_live_...SECRET_SHOWN_ONCE' }
+                  key: { $ref: '#/components/schemas/KeyMetadata' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/monitoring/projects/{id}/keys/{keyId}:
+    delete:
+      tags: [Credentials]
+      summary: Revoke a project ingestion key
+      security: [{ userSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Key revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/monitoring/projects/{id}/status:
+    get:
+      tags: [Telemetry]
+      summary: Check whether recent traces have arrived
+      description: connected means a trace was received in the last 10 minutes; has_received means any trace has ever been stored.
+      security: [{ userSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: Trace connection state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [connected, has_received, last_seen_at, span_count]
+                properties:
+                  connected: { type: boolean }
+                  has_received: { type: boolean }
+                  last_seen_at: { type: [string, 'null'], format: date-time }
+                  span_count: { type: integer, minimum: 0 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/monitoring/projects/{id}/spans:
+    get:
+      tags: [Telemetry]
+      summary: Read latest traces in an authorized personal project
+      security: [{ userSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Stored HTTP server spans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  spans:
+                    type: array
+                    items: { $ref: '#/components/schemas/StoredSpan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /otlp/v1/traces:
+    post:
+      tags: [OTLP]
+      summary: Receive OTLP/HTTP-JSON traces from Node.js OpenTelemetry
+      description: |
+        Send-only project key is required in the x-to-project-key header.
+        This pilot stores only HTTP SERVER spans with whitelisted fields.
+        Max 256 KB/request; 100 input spans; 600 stored spans/project/minute.
+        OTLP/HTTP binary protobuf and gRPC are not supported in this version.
+      security: [{ projectIngestKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceSpans]
+              properties:
+                resourceSpans:
+                  type: array
+                  description: OTLP ExportTraceServiceRequest resourceSpans in Protobuf JSON mapping
+                  items: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Received and stored eligible HTTP server spans
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true, example: {} }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /otlp/v1/logs:
+    post:
+      tags: [OTLP]
+      summary: OTLP logs (not available in v1)
+      responses:
+        '501': { description: OTLP log ingestion is not enabled }
+  /otlp/v1/metrics:
+    post:
+      tags: [OTLP]
+      summary: OTLP metrics (not available in v1)
+      responses:
+        '501': { description: OTLP metric ingestion is not enabled }
+components:
+  securitySchemes:
+    userSession:
+      type: http
+      scheme: bearer
+      bearerFormat: VERIFIED_LOGIN_TOKEN
+      description: Existing T.O. user authentication (verified by backend adapter); not an ingestion key.
+    projectIngestKey:
+      type: apiKey
+      in: header
+      name: x-to-project-key
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    BadRequest: { description: Invalid request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: Invalid or missing credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: Project not found or not owned by this user, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Conflict or too many active keys, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    TooLarge: { description: Too many spans or large body, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    UnsupportedMedia: { description: Only OTLP/HTTP JSON is enabled, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    TooManyRequests: { description: Project ingestion quota reached; see Retry-After header }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Project:
+      type: object
+      required: [id, name, runtime, environment, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: Shopping API }
+        runtime: { type: string, const: nodejs }
+        environment: { type: string, enum: [development, staging, production] }
+        created_at: { type: string, format: date-time }
+        ingest_url:
+          type: [string, 'null']
+          format: uri
+          example: https://YOUR-RENDER-API/otlp/v1/traces
+    KeyMetadata:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        key_prefix: { type: string, example: 'to_live_aBcdEf12' }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+    StoredSpan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        received_at: { type: string, format: date-time }
+        started_at: { type: [string, 'null'], format: date-time }
+        service_name: { type: string }
+        trace_id: { type: string }
+        span_id: { type: string }
+        http_method: { type: [string, 'null'] }
+        http_route: { type: [string, 'null'] }
+        http_status: { type: [integer, 'null'] }
+        duration_ms: { type: [number, 'null'] }
+        span_error: { type: boolean }

@@ -3,11 +3,15 @@ import Home from './App.jsx' // Preserves your previously completed homepage at 
 import Welcome from './pages/Welcome.jsx'
 import Auth from './pages/Auth.jsx'
 import Workspace from './pages/Workspace.jsx'
-
+      import ApiDocs from "./pages/ApiDocs";
 export default function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+
+
+
+<Route path="/docs" element={<ApiDocs />} />
       <Route path="/welcome" element={<Welcome />} />
       <Route path="/login" element={<Auth />} />
       <Route path="/signup" element={<Auth />} />
