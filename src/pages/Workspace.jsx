@@ -6,10 +6,11 @@ import { useAuth } from '../context/AuthContext'
 import './Workspace.css'
 import ApplicationsPanel from './ApplicationsPanel'
 import Overview from './Overview'
+import TraceExplorer from './TraceExplorer'
 import { createWorkspaceOverviewStore } from '../lib/workspaceOverview.js'
 
 const navigation = [
-  ['Overview', LayoutDashboard], ['Applications', Network], ['Log Explorer', Terminal],
+  ['Overview', LayoutDashboard], ['Applications', Network], ['Trace Explorer', Activity], ['Log Explorer', Terminal],
   ['Dashboards', Gauge], ['Saved Searches', Bookmark], ['Alerts', Bell],
   ['Investigations', FileSearch], ['T.O. Splunk Studio', BookOpen, 'https://www.to-analytics.com/splunk-studio'], ['Team', Users], ['Settings', Settings],
 ]
@@ -31,6 +32,7 @@ function WorkspaceDashboard({ user }) {
   const [drawer, setDrawer] = useState(false)
   const [profile, setProfile] = useState(false)
   const [active, setActive] = useState('Overview')
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [logoutError, setLogoutError] = useState('')
@@ -94,7 +96,7 @@ function WorkspaceDashboard({ user }) {
     <main id="workspace-main" className="ws-main" tabIndex={-1}>
       {logoutError && <p role="alert" className="ws-error">{logoutError}</p>}
       {notice && <div role="status" className="ws-notice"><span>{notice}</span><button className="ws-icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={18}/></button></div>}
-      {active === 'Overview' ? <Overview state={projectState} onRefresh={projectStore.refresh} onApplications={() => selectPage('Applications')} /> : active === 'Applications' ? <ApplicationsPanel user={user} projectStore={projectStore} projectState={projectState} /> : <section className="ws-card ws-section-page"><span className="ws-badge ws-purple">Workspace preview</span><h1>{active}</h1>{active === 'Settings' ? <><h2>Your account</h2><p><strong>{name}</strong><br/>{user.email}</p><p>Workspace preferences are coming soon.</p></> : <><div className="ws-empty-icon">{active === 'Applications' ? <FolderPlus size={36}/> : <Search size={36}/>}</div><h2>{active === 'Applications' ? 'Connect your first application' : `Your ${active.toLowerCase()} will appear here`}</h2><p>{active === 'Applications' ? 'Application registration and ingestion setup are being built. No applications have been created by this preview.' : 'This section is being built. Live workspace data is not connected yet.'}</p></>}<button className="ws-secondary" onClick={() => selectPage('Overview')}>Back to overview<ArrowRight size={16}/></button></section>}
+      {active === 'Overview' ? <Overview state={projectState} onRefresh={projectStore.refresh} onApplications={() => selectPage('Applications')} /> : active === 'Applications' ? <ApplicationsPanel user={user} projectStore={projectStore} projectState={projectState} selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} /> : active === 'Trace Explorer' ? <TraceExplorer projectStore={projectStore} projectState={projectState} selectedProjectId={selectedProjectId} onSelectProject={setSelectedProjectId} onApplications={() => selectPage('Applications')} /> : <section className="ws-card ws-section-page"><span className="ws-badge ws-purple">Workspace preview</span><h1>{active}</h1>{active === 'Settings' ? <><h2>Your account</h2><p><strong>{name}</strong><br/>{user.email}</p><p>Workspace preferences are coming soon.</p></> : <><div className="ws-empty-icon">{active === 'Applications' ? <FolderPlus size={36}/> : <Search size={36}/>}</div><h2>{active === 'Applications' ? 'Connect your first application' : `Your ${active.toLowerCase()} will appear here`}</h2><p>{active === 'Applications' ? 'Application registration and ingestion setup are being built. No applications have been created by this preview.' : 'This section is being built. Live workspace data is not connected yet.'}</p></>}<button className="ws-secondary" onClick={() => selectPage('Overview')}>Back to overview<ArrowRight size={16}/></button></section>}
       <footer className="ws-footer">T.O. Monitoring <span>Built by T.O. Analytics</span></footer>
     </main>
   </div>

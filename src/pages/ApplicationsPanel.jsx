@@ -5,6 +5,7 @@ import { monitoringRequest } from '../lib/monitoringApi.js'
 import { envSnippet, powershellSnippet, OTEL_INSTALL, OTEL_START } from '../lib/otelSetup'
 import { createApplicationDetails, connectionMessage } from '../lib/applicationDetails.js'
 import ProjectKeys from './ProjectKeys'
+import ApplicationSelector from './ApplicationSelector'
 
 // Share the existing HttpOnly session and CSRF lifecycle used by sign-in.
 const request = (_user, path, options = {}) => monitoringRequest(path, options)
@@ -30,7 +31,7 @@ function friendlyDate(value) {
   return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString()
 }
 
-export default function ApplicationsPanel({ user, projectStore, projectState }) {
+export default function ApplicationsPanel({ user, projectStore, projectState, selectedProjectId, onSelectProject }) {
   const apps = projectState.projects
   const loading = projectState.loading
   const [selectedId, setSelectedId] = useState(null)
@@ -44,7 +45,8 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
   const detailsStore = useMemo(() => createApplicationDetails({ onStatus: projectStore.noteStatus, onStatusError: projectStore.noteStatusError }), [projectStore])
   const detailsSnapshot = useSyncExternalStore(detailsStore.subscribe, detailsStore.getSnapshot, detailsStore.getSnapshot)
 
-  const currentId = apps.some(app => app.id === selectedId) ? selectedId : apps[0]?.id || null
+  const selection = selectedProjectId === undefined ? selectedId : selectedProjectId
+  const currentId = apps.some(app => app.id === selection) ? selection : apps[0]?.id || null
   const selected = apps.find(app => app.id === currentId) || null
   const hasIngest = Boolean(selected?.ingest_url)
 
@@ -70,6 +72,7 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
       })
       projectStore.addProject(created.project)
       setSelectedId(created.project.id)
+      onSelectProject?.(created.project.id)
       setGenerated(null)
       setShowSecret(false)
       setPendingRevoke(null)
@@ -100,6 +103,7 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
     if (id === currentId) return
     detailsStore.selectProject(id)
     setSelectedId(id)
+    onSelectProject?.(id)
     setGenerated(null)
     setShowSecret(false)
     setPendingRevoke(null)
@@ -145,7 +149,7 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
             <select id="to-app-environment" value={environment} onChange={e => setEnvironment(e.target.value)}><option value="development">Development</option><option value="staging">Staging</option><option value="production">Production</option></select>
             <button className="ws-primary" type="submit" disabled={busy === 'create'}><PlusCircle size={17}/>{busy === 'create' ? 'Creating…' : 'Create application'}</button>
           </form>
-          {apps.length > 0 && <div className="to-app-existing"><strong>Your applications</strong>{apps.map(app => <button key={app.id} type="button" onClick={() => choose(app.id)} aria-pressed={currentId === app.id} className={currentId === app.id ? 'to-app-selected' : ''}><span>{app.name}<small>{app.environment}</small></span>{currentId === app.id && <CheckCircle2 size={17}/>}</button>)}</div>}
+          {apps.length > 0 && <ApplicationSelector projects={apps} selectedId={currentId} onSelect={choose} />}
         </section>
         <div className="to-app-details">
           {selected ? <>
