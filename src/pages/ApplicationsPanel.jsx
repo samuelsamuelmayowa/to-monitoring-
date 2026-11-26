@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, CheckCircle2, ClipboardCopy, CloudUpload, KeyRound, PlusCircle, RefreshCw, ShieldCheck, Terminal, TriangleAlert } from 'lucide-react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { Activity, CheckCircle2, ClipboardCopy, CloudUpload, PlusCircle, RefreshCw, ShieldCheck, Terminal, TriangleAlert } from 'lucide-react'
 import './ApplicationsPanel.css'
 import { monitoringRequest } from '../lib/monitoringApi.js'
 import { envSnippet, powershellSnippet, OTEL_INSTALL, OTEL_START } from '../lib/otelSetup'
+import { createApplicationDetails, connectionMessage } from '../lib/applicationDetails.js'
+import ProjectKeys from './ProjectKeys'
 
 // Share the existing HttpOnly session and CSRF lifecycle used by sign-in.
 const request = (_user, path, options = {}) => monitoringRequest(path, options)
@@ -34,40 +36,28 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
   const [selectedId, setSelectedId] = useState(null)
   const [name, setName] = useState('Shopping API')
   const [environment, setEnvironment] = useState('development')
-  const [newSecret, setNewSecret] = useState('')
+  const [generated, setGenerated] = useState(null)
+  const [pendingRevoke, setPendingRevoke] = useState(null)
   const [showSecret, setShowSecret] = useState(false)
-  const [state, setState] = useState(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const [statusError, setStatusError] = useState(null)
-  const [keys, setKeys] = useState([])
-  const selection = useRef(null)
+  const detailsStore = useMemo(() => createApplicationDetails({ onStatus: projectStore.noteStatus, onStatusError: projectStore.noteStatusError }), [projectStore])
+  const detailsSnapshot = useSyncExternalStore(detailsStore.subscribe, detailsStore.getSnapshot, detailsStore.getSnapshot)
 
   const currentId = apps.some(app => app.id === selectedId) ? selectedId : apps[0]?.id || null
   const selected = apps.find(app => app.id === currentId) || null
   const hasIngest = Boolean(selected?.ingest_url)
 
-  const checkStatus = useCallback(async (projectId) => {
-    try {
-      const next = await request(user, `/projects/${encodeURIComponent(projectId)}/status`)
-      if (selection.current !== projectId) return
-      setState({ ...next, projectId })
-      projectStore.noteStatus(projectId, next)
-      setStatusError(null)
-    } catch (err) { if (selection.current === projectId) { setStatusError({ projectId, message: err.message }); projectStore.noteStatusError(projectId, err.message) } }
-  }, [user, projectStore])
-
+  const details = detailsSnapshot.projectId === currentId ? detailsSnapshot : {
+    projectId: currentId, keys: [], activeCount: null, maxActiveKeys: 3,
+    keysLoaded: false, keysLoading: true, keysError: '', status: null, statusLoading: true, statusError: '',
+  }
+  const newSecret = generated?.projectId === currentId ? generated.secret : ''
   useEffect(() => {
-    selection.current = currentId
-    if (!currentId) return undefined
-    void checkStatus(currentId)
-    let cancelled = false
-    request(user, `/projects/${encodeURIComponent(currentId)}/keys`).then(result => {
-      if (!cancelled) setKeys(result.keys)
-    }).catch(err => { if (!cancelled) setError(err.message) })
-    const handle = setInterval(() => void checkStatus(currentId), 15000)
-    return () => { cancelled = true; selection.current = null; clearInterval(handle) }
-  }, [currentId, checkStatus, user])
+    detailsStore.selectProject(currentId)
+    const timer = setInterval(() => void detailsStore.refreshStatus(), 15000)
+    return () => { clearInterval(timer); detailsStore.selectProject(null) }
+  }, [currentId, detailsStore])
 
   async function createProject(e) {
     e.preventDefault()
@@ -80,56 +70,62 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
       })
       projectStore.addProject(created.project)
       setSelectedId(created.project.id)
-      setNewSecret('')
+      setGenerated(null)
       setShowSecret(false)
-      setKeys([])
+      setPendingRevoke(null)
     } catch (err) { setError(err.message) }
     finally { setBusy('') }
   }
 
   async function generateKey() {
-    if (!selected) return
+    if (!selected || details.keysLoading || !details.keysLoaded || details.keysError || details.activeCount === null || details.activeCount >= 3) return
     const projectId = selected.id
     setBusy('key'); setError('')
     try {
       const result = await request(user, `/projects/${encodeURIComponent(projectId)}/keys`, { method: 'POST' })
-      if (selection.current !== projectId) return
-      setNewSecret(result.secret)
+      if (detailsStore.getSnapshot().projectId !== projectId) return
+      setGenerated({ projectId, secret: result.secret, keyId: result.key.id })
       setShowSecret(true)
-      const resultKeys = await request(user, `/projects/${encodeURIComponent(projectId)}/keys`)
-      if (selection.current === projectId) setKeys(resultKeys.keys)
-    } catch (err) { setError(err.message) }
-    finally { setBusy('') }
-  }
-
-  async function refreshStatus() {
-    if (!selected) return
-    setBusy('status')
-    await checkStatus(selected.id)
-    setBusy('')
+    } catch (err) {
+      if (detailsStore.getSnapshot().projectId === projectId) setError(err.message)
+    } finally {
+      // A rejected creation (including 409) must still restore authoritative
+      // metadata. This GET does not create another key or retry the POST.
+      if (detailsStore.getSnapshot().projectId === projectId) await detailsStore.refreshKeys()
+      setBusy('')
+    }
   }
 
   function choose(id) {
+    if (id === currentId) return
+    detailsStore.selectProject(id)
     setSelectedId(id)
-    setNewSecret('')
+    setGenerated(null)
     setShowSecret(false)
+    setPendingRevoke(null)
     setError('')
-    setKeys([])
   }
 
   async function revokeKey(id) {
+    const projectId = currentId
+    if (pendingRevoke?.projectId !== projectId || pendingRevoke.keyId !== id) return
     setBusy('revoke'); setError('')
     try {
-      await request(user, `/projects/${encodeURIComponent(selected.id)}/keys/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      setKeys(old => old.map(key => key.id === id ? { ...key, revoked_at: new Date().toISOString() } : key))
-      setNewSecret(''); setShowSecret(false)
-    } catch (err) { setError(err.message) }
-    finally { setBusy('') }
+      await request(user, `/projects/${encodeURIComponent(projectId)}/keys/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (detailsStore.getSnapshot().projectId !== projectId) return
+      if (generated?.keyId === id) { setGenerated(null); setShowSecret(false) }
+      setPendingRevoke(null)
+    } catch (err) {
+      if (detailsStore.getSnapshot().projectId === projectId) setError(err.message)
+    } finally {
+      if (detailsStore.getSnapshot().projectId === projectId) await detailsStore.refreshKeys()
+      setBusy('')
+    }
   }
   const setup = { name: selected?.name || 'shopping-api', endpoint: selected?.ingest_url, secret: newSecret || 'YOUR_PROJECT_SECRET' }
   const envText = envSnippet(setup)
-  const currentStatus = state?.projectId === currentId ? state : null
-  const connectionError = statusError?.projectId === currentId ? statusError.message : ''
+  const currentStatus = details.status
+  const connectionError = details.statusError
 
   return <div className="to-app-panel">
     <header className="to-app-heading"><div><span className="ws-badge ws-purple">OpenTelemetry • Node.js</span><h1>Applications</h1><p>Connect your existing backend without uploading its source code.</p></div><Activity size={29}/></header>
@@ -153,14 +149,13 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
         </section>
         <div className="to-app-details">
           {selected ? <>
-            <section className="ws-card to-app-card"><h2>2. Generate ingestion key</h2><p>This secret only lets your Node.js service <strong>send</strong> telemetry to this project. It cannot read private logs.</p><div className="to-app-key">
-              <KeyRound size={18}/><code>{newSecret ? (showSecret ? newSecret : '••••••••••••••••••••••••') : 'No new key shown'}</code>
-              {newSecret && <button type="button" onClick={() => setShowSecret(v => !v)}>{showSecret ? 'Hide' : 'Show'}</button>}
-            </div>
-              <button type="button" className="ws-secondary" onClick={generateKey} disabled={busy === 'key'}><KeyRound size={16}/>{busy === 'key' ? 'Generating…' : 'Generate new key'}</button>
-              <p className="to-app-small">Keep the key in the backend's environment variables. The server displays a newly generated key only once; do not commit it to GitHub. Creating additional keys does not revoke old keys.</p>
-              {keys.map(key => <div className="to-app-key" key={key.id}><code>{key.key_prefix}…</code>{key.revoked_at ? <span>Revoked</span> : <button type="button" disabled={Boolean(busy)} onClick={() => revokeKey(key.id)}>Revoke</button>}</div>)}
-            </section>
+            <p className="to-app-small">Selected application: <strong>{selected.name}</strong> · Project ID: <code>{currentId}</code></p>
+            <ProjectKeys details={details} secret={newSecret} showSecret={showSecret}
+              onToggleSecret={() => setShowSecret(value => !value)} onRefresh={detailsStore.refreshKeys}
+              onGenerate={generateKey} busy={Boolean(busy)}
+              pendingRevoke={pendingRevoke?.projectId === currentId ? pendingRevoke.keyId : null}
+              onRevoke={id => setPendingRevoke({projectId: currentId, keyId: id})}
+              onConfirmRevoke={revokeKey} onCancelRevoke={() => setPendingRevoke(null)} />
             <section className="ws-card to-app-card"><h2>3. Install OpenTelemetry</h2><p>Run this inside the existing Node.js backend folder.</p>
               <Snippet title="Terminal · Node.js 22.15+" code={OTEL_INSTALL}/>
             </section>
@@ -173,9 +168,11 @@ export default function ApplicationsPanel({ user, projectStore, projectState }) 
               <Snippet title="Terminal" code={OTEL_START}/>
               <p className="to-app-small">Replace <code>server.cjs</code> with your CommonJS entry file. With PowerShell environment variables, omit <code>--env-file=.env</code>. Call an Express route, allow a few seconds for batch export, then check the connection. ESM instrumentation needs separate loader setup. Only HTTP/JSON traces are supported; protobuf, logs, and metrics are unavailable.</p>
             </section>
-            <section className="ws-card to-app-card to-app-status"><div className="to-app-status-top"><h2>Connection status</h2><button className="ws-secondary" type="button" onClick={refreshStatus} disabled={busy === 'status'}><RefreshCw size={15}/>{busy === 'status' ? 'Checking…' : 'Check connection'}</button></div>
-              {connectionError ? <div className="to-app-error" role="alert"><TriangleAlert size={21}/>Connection error — {connectionError}</div> : currentStatus?.connected ? <div className="to-app-connected"><CheckCircle2 size={21}/>Connected — authenticated OpenTelemetry spans received</div> : <div className="to-app-pending"><CloudUpload size={21}/>{!currentStatus ? 'Checking connection…' : currentStatus.has_received ? 'Not connected — no trace received in the last 10 minutes' : newSecret || keys.some(key => !key.revoked_at) ? 'Waiting for telemetry — start your instrumented application' : 'Not connected — generate an ingestion key to begin'}</div>}
-              <p>{friendlyDate(currentStatus?.last_seen_at)}</p><p className="to-app-small">{currentStatus?.span_count ?? 0} stored HTTP server spans · 7-day retention</p>
+            <section className="ws-card to-app-card to-app-status"><div className="to-app-status-top"><h2>Connection status</h2><button className="ws-secondary" type="button" onClick={detailsStore.refresh} disabled={details.statusLoading || details.keysLoading}><RefreshCw size={15}/>{details.statusLoading ? 'Checking…' : 'Check connection'}</button></div>
+              <div className={connectionError ? 'to-app-error' : currentStatus?.connected ? 'to-app-connected' : 'to-app-pending'} role={connectionError ? 'alert' : 'status'}>{currentStatus?.connected ? <CheckCircle2 size={21}/> : <CloudUpload size={21}/>} {connectionMessage(details)}</div>
+              <p>{currentStatus ? friendlyDate(currentStatus.last_seen_at) : 'Last trace receipt is not yet verified'}</p>
+              <p className="to-app-small">{currentStatus?.span_count ?? '—'} stored HTTP server spans · 7-day retention</p>
+              <p className="to-app-small">An empty OTLP request can return HTTP 200 with zero stored spans. Connection requires an eligible HTTP SERVER span; the receiver reports newly stored spans in X-TO-Stored-Spans.</p>
               <div className="to-app-status-foot"><ShieldCheck size={16}/><span>Only authenticated telemetry for this project is accepted. Private by default.</span></div>
             </section>
           </> : <section className="ws-card to-app-card"><Terminal size={32}/><h2>Create your first application</h2><p>Once created, the OpenTelemetry connection guide will appear here.</p></section>}

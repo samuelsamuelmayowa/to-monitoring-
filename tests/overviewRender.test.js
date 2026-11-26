@@ -4,11 +4,12 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createServer } from 'vite'
 
-let vite, Overview, ApplicationsPanel
+let vite, Overview, ApplicationsPanel, ProjectKeys
 before(async () => {
   vite = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'custom' })
   Overview = (await vite.ssrLoadModule('/src/pages/Overview.jsx')).default
   ApplicationsPanel = (await vite.ssrLoadModule('/src/pages/ApplicationsPanel.jsx')).default
+  ProjectKeys = (await vite.ssrLoadModule('/src/pages/ProjectKeys.jsx')).default
 })
 after(async () => { await vite?.close() })
 const render = state => renderToStaticMarkup(createElement(Overview, { state, onRefresh() {}, onApplications() {} }))
@@ -51,4 +52,20 @@ test('Applications uses the shared registered list and selects its first project
   assert.match(html, /MAFACONNECT API/)
   assert.match(html, /aria-pressed="true" class="to-app-selected"/)
   assert.match(html, /Generate ingestion key/)
+})
+
+test('key UI distinguishes missing displayed secret from three active keys and exposes only metadata', () => {
+  const details={keys:Array.from({length:3},(_,i)=>({id:String(i),key_prefix:`to_live_TEST000${i}`,created_at:'2026-11-25T10:00:00Z',last_used_at:null,revoked_at:null,key_hash:'PRIVATE_HASH',secret:'OLD_SECRET'})),activeCount:3,maxActiveKeys:3,keysLoaded:true,keysLoading:false,keysError:''}
+  const html=renderToStaticMarkup(createElement(ProjectKeys,{details}))
+  assert.match(html,/No newly generated secret currently displayed/)
+  assert.match(html,/Active ingestion keys \(3\/3\)/)
+  assert.match(html,/datetime="2026-11-25T10:00:00Z"/i)
+  assert.match(html,/Created:/)
+  assert.match(html,/>Revoke<\/button>/)
+  assert.match(html,/<button[^>]+disabled=""[^>]*>.*?Generate new key/)
+  assert.ok(!html.includes('PRIVATE_HASH')&&!html.includes('OLD_SECRET'))
+  assert.ok(!html.includes('<p>No active ingestion keys.</p>'))
+  const failed=renderToStaticMarkup(createElement(ProjectKeys,{details:{...details,keys:[],activeCount:null,keysError:'read failed'}}))
+  assert.match(failed,/Key metadata unavailable/)
+  assert.ok(!failed.includes('<p>No active ingestion keys.</p>'))
 })

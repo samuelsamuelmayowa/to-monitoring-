@@ -42,9 +42,13 @@ paths:
                   - projects
                 properties:
                   total:
-                    type: [integer, 'null']
+                    type:
+                      - integer
+                      - 'null'
                     minimum: 0
-                    description: Exact count of projects owned by the verified user, independent of the 100-row list limit.
+                    description: >-
+                      Exact count of projects owned by the verified user, independent of the 100-row list
+                      limit.
                   projects:
                     type: array
                     items:
@@ -139,6 +143,13 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/KeyMetadata'
+                  active_count:
+                    type: integer
+                    minimum: 0
+                    description: Exact active-key count scoped to the authorized project.
+                  max_active_keys:
+                    type: integer
+                    const: 3
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -151,6 +162,9 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '503':
           $ref: '#/components/responses/Unavailable'
+      description: >-
+        Returns all active metadata (maximum three) plus the 50 most recent records, deduplicated. Never
+        returns hashes or old secrets.
     post:
       tags:
         - Credentials
@@ -285,7 +299,8 @@ paths:
     get:
       tags:
         - Telemetry
-      summary: Read latest traces in an authorized personal project
+      summary: Read latest HTTP server spans or an authorized project trace
+      description: Advanced trace filtering requires the reviewed Phase 1 migration and server feature flag. Without trace_id, only HTTP server spans are returned.
       security:
         - userSession: []
         - sessionCookie: []
@@ -299,6 +314,12 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
+        - in: query
+          name: trace_id
+          description: Advanced mode only. Exact lowercase nonzero trace ID; always scoped to the owned project. Returns at most limit spans ordered by start time.
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{32}$'
       responses:
         '200':
           description: Stored HTTP server spans
@@ -307,6 +328,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  possibly_truncated:
+                    type: boolean
+                    description: Advanced mode only; true when the limit was reached. No complete-trace guarantee.
                   spans:
                     type: array
                     items:
@@ -354,7 +378,7 @@ paths:
                     additionalProperties: true
       responses:
         '200':
-          description: Received and stored eligible HTTP server spans
+          description: Received eligible spans (HTTP server by default; allowlisted dependencies in enabled advanced mode)
           content:
             application/json:
               schema:
@@ -363,7 +387,7 @@ paths:
                 example: {}
           headers:
             X-TO-Stored-Spans:
-              description: New spans persisted; duplicates and non-HTTP/server spans do not advance connection status
+              description: New eligible spans persisted; duplicates and excluded spans do not advance connection status
               schema:
                 type: integer
                 minimum: 0
@@ -604,3 +628,27 @@ components:
             - 'null'
         span_error:
           type: boolean
+        parent_span_id:
+          type: [string, 'null']
+          description: Advanced mode only; the parent may be excluded or sampled out.
+        span_kind:
+          type: string
+          enum: [SERVER, CLIENT]
+        span_name:
+          type: [string, 'null']
+          description: Synthesized safe operation label; legacy rows may be null.
+        environment:
+          type: [string, 'null']
+          enum: [development, staging, production, test, null]
+        service_version:
+          type: [string, 'null']
+          description: Numeric release version only.
+        db_system:
+          type: [string, 'null']
+          enum: [mysql, postgresql, sqlite, redis, mongodb, null]
+        db_operation:
+          type: [string, 'null']
+          description: Allowlisted operation or generic query; never SQL text.
+        error_type:
+          type: [string, 'null']
+          description: Allowlisted error class or generic Error; no messages or stacks.

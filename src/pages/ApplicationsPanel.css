@@ -32,3 +32,7 @@
 .to-app-connected{color:#3ab98a}.to-app-pending{color:#c99c57}
 .to-app-status-foot{display:flex;align-items:center;gap:8px;font-size:12px;color:#8992a5;margin-top:16px}
 @media(max-width:900px){.to-app-layout{grid-template-columns:1fr}.to-app-card{padding:17px}}
+.to-app-key-record { border:1px solid #e8e1f0; border-radius:10px; padding:14px; margin:12px 0; }
+.to-app-key-record > div { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.to-app-key-record p { margin:6px 0; font-size:12px; }
+.to-app-key-record code, .to-app-small code { overflow-wrap:anywhere; }
