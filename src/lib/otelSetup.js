@@ -11,7 +11,7 @@ export function otelEnvironment({ name = 'shopping-api', endpoint = OTLP_URL, se
     OTEL_EXPORTER_OTLP_TRACES_HEADERS: `x-to-project-key=${secret}`,
     OTEL_METRICS_EXPORTER: 'none', OTEL_LOGS_EXPORTER: 'none',
     OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '100', OTEL_BSP_MAX_QUEUE_SIZE: '1000',
-    OTEL_NODE_ENABLED_INSTRUMENTATIONS: 'http,express',
+    OTEL_NODE_ENABLED_INSTRUMENTATIONS: 'http,express,mysql2',
   }
 }
 export const envSnippet = options => Object.entries(otelEnvironment(options)).map(([key, value]) => `${key}=${value}`).join('\n')

@@ -164,6 +164,7 @@ export default function ApplicationsPanel({ user, projectStore, projectState, se
               <Snippet title="Terminal · Node.js 22.15+" code={OTEL_INSTALL}/>
             </section>
             <section className="ws-card to-app-card"><h2>4. Configure the backend</h2><p>Add these values to the backend's <code>.env</code> file. The endpoint below comes from your T.O. API configuration.</p>
+              <p className="to-app-small">Enable HTTP, Express and mysql2 together to correlate supported MySQL operations with requests. Dependency storage requires advanced tracing on the receiver. Background database activity does not establish an HTTP connection.</p>
               <Snippet title="Backend .env — keep private" code={envText} disabled={!hasIngest}/>
               <details><summary>Windows PowerShell alternative</summary><Snippet title="PowerShell · current session" code={powershellSnippet(setup)} disabled={!hasIngest}/></details>
               {!hasIngest && <p className="to-app-small">Ingestion URL is not configured on the backend. Configure <code>MONITORING_PUBLIC_OTLP_TRACES_URL</code> before connecting.</p>}
