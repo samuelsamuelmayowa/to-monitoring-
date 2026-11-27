@@ -16,7 +16,7 @@ export function summarizeWorkspace(state) {
   const steps = [
     { title: 'Sign in', subtitle: 'Your verified personal account', state: 'Done' },
     { title: 'Register an application', subtitle: 'Add your Node.js application', state: state.applicationCount === null ? 'Unknown' : state.applicationCount > 0 ? 'Done' : 'Current' },
-    { title: 'Connect OpenTelemetry', subtitle: 'An authenticated trace received in the last 10 minutes', state: connected ? 'Done' : connectionKnown ? state.projects.length ? 'Current' : 'Pending' : 'Unknown' },
+    { title: 'Connect OpenTelemetry', subtitle: 'An authenticated HTTP server span received in the last 10 minutes', state: connected ? 'Done' : connectionKnown ? state.projects.length ? 'Current' : 'Pending' : 'Unknown' },
     { title: 'Collect application logs', subtitle: 'Log ingestion is not available yet', state: 'Planned' },
     { title: 'Create a dashboard', subtitle: 'Dashboard persistence is not available yet', state: 'Planned' },
   ]

@@ -5,6 +5,16 @@ const idle = { connected: false, has_received: false, last_seen_at: null, span_c
 const keys = Array.from({length:3},(_,i)=>({id:`key-${i}`,key_prefix:`to_live_TEST000${i}`,created_at:'2026-11-25T10:00:00Z',last_used_at:null,revoked_at:null}))
 const tick = () => new Promise(resolve=>setImmediate(resolve))
 
+test('recent database activity is explicitly distinct from HTTP activity and availability', () => {
+  const details = { status: { ...idle, database_active: true }, keysLoaded: true, activeCount: 1 }
+  assert.match(connectionMessage(details), /HTTP telemetry inactive.*database telemetry/)
+  details.status = { ...details.status, has_received: true }
+  assert.match(connectionMessage(details), /HTTP telemetry inactive/)
+  details.status = { ...details.status, connected: true }
+  assert.match(connectionMessage(details), /Connected.*HTTP server spans/)
+  assert.ok(!connectionMessage(details).includes('available'))
+})
+
 test('three existing active keys remain visible when the same project is reselected',async()=>{
   const calls=[]
   const store=createApplicationDetails({request:async(path,options)=>{calls.push({path,options});return path.endsWith('/keys')?{keys,active_count:3}:idle}})

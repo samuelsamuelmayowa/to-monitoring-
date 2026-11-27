@@ -30,6 +30,19 @@ test('one registered MAFACONNECT application is one application before telemetry
   assert.deepEqual(summary.steps.map(step => step.state), ['Done', 'Done', 'Current', 'Planned', 'Planned'])
 })
 
+test('535 historic HTTP spans and fresh database telemetry preserve counts without claiming connection', async () => {
+  const { store } = setup([project], { [project.id]: {
+    ...idle, has_received: true, span_count: 535, database_active: true, http_active: false,
+    last_seen_at: '2026-11-26T18:46:00Z', database_last_seen_at: '2026-11-27T10:13:00Z', availability: 'unknown',
+  } })
+  await store.refresh()
+  const summary = summarizeWorkspace(store.getSnapshot())
+  assert.equal(summary.applications, 1)
+  assert.equal(summary.spans, 535)
+  assert.equal(summary.connectedApplications, 0)
+  assert.equal(summary.connected, false)
+})
+
 test('sums actual stored spans and connections; stale traces do not claim a live connection', async () => {
   const second = { id: 'second-project', name: 'Second API' }
   const { store } = setup([project, second], {

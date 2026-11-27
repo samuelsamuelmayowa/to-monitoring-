@@ -18,7 +18,8 @@ export function connectionMessage(details) {
   if (details.statusError) return `Connection error — ${details.statusError}`
   if (!details.status) return 'Checking connection…'
   if (details.status.connected) return 'Connected — authenticated HTTP server spans received in the last 10 minutes'
-  if (details.status.has_received) return 'Not connected — no trace received in the last 10 minutes'
+  if (details.status.database_active) return 'HTTP telemetry inactive — database telemetry received in the last 10 minutes'
+  if (details.status.has_received) return 'Not connected — no HTTP server span received in the last 10 minutes'
   if (!details.keysLoaded || details.keysLoading) return 'Not connected — checking active ingestion keys'
   if (details.keysError || details.activeCount === null) return 'Not connected — active-key status unavailable; refresh key metadata'
   return details.activeCount > 0

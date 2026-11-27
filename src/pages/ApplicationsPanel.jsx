@@ -174,7 +174,9 @@ export default function ApplicationsPanel({ user, projectStore, projectState, se
             </section>
             <section className="ws-card to-app-card to-app-status"><div className="to-app-status-top"><h2>Connection status</h2><button className="ws-secondary" type="button" onClick={detailsStore.refresh} disabled={details.statusLoading || details.keysLoading}><RefreshCw size={15}/>{details.statusLoading ? 'Checking…' : 'Check connection'}</button></div>
               <div className={connectionError ? 'to-app-error' : currentStatus?.connected ? 'to-app-connected' : 'to-app-pending'} role={connectionError ? 'alert' : 'status'}>{currentStatus?.connected ? <CheckCircle2 size={21}/> : <CloudUpload size={21}/>} {connectionMessage(details)}</div>
-              <p>{currentStatus ? friendlyDate(currentStatus.last_seen_at) : 'Last trace receipt is not yet verified'}</p>
+              <p>HTTP telemetry: {currentStatus ? friendlyDate(currentStatus.last_seen_at) : 'Receipt is not yet verified'}</p>
+              <p className="to-app-small">Database telemetry: {currentStatus?.database_last_seen_at ? friendlyDate(currentStatus.database_last_seen_at) : 'No stored activity reported'}</p>
+              <p className="to-app-small">Application availability: unknown — telemetry receipt is not an availability check.</p>
               <p className="to-app-small">{currentStatus?.span_count ?? '—'} stored HTTP server spans · 7-day retention</p>
               <p className="to-app-small">An empty OTLP request can return HTTP 200 with zero stored spans. Connection requires an eligible HTTP SERVER span; the receiver reports newly stored spans in X-TO-Stored-Spans.</p>
               <div className="to-app-status-foot"><ShieldCheck size={16}/><span>Only authenticated telemetry for this project is accepted. Private by default.</span></div>
