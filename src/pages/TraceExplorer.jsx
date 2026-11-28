@@ -52,7 +52,7 @@ export function TraceExplorerView({ projectState, currentId, state, filters = de
             </section>
             <section className="ws-card te-results" aria-label="HTTP server spans" aria-busy={list.loading}>
               <div className="te-results-heading"><div><h2>{project?.name}</h2><p>{list.loaded ? `${rows.length} matching of ${list.spans.length} loaded server spans` : 'HTTP server spans'}{list.loadedAt ? ` · Refreshed ${date(new Date(list.loadedAt).toISOString())}` : ''}</p></div><span className="ws-badge ws-gray">100-span response limit</span></div>
-              {list.truncated && <p className="te-warning" role="status">Results may be truncated. The API limit was reached or the server flagged a partial response. This is not complete trace history; pagination is unavailable.</p>}
+              {/* {list.truncated && <p className="te-warning" role="status">Results may be truncated. The API limit was reached or the server flagged a partial response. This is not complete trace history; pagination is unavailable.</p>} */}
               {list.loading ? <div className="te-state" role="status">Loading HTTP server spans…</div>
                 : list.error ? <div className="ws-error" role="alert">Unable to load traces: {list.error} <button className="ws-secondary" onClick={onRefresh}>Retry traces</button></div>
                   : list.loaded && !list.spans.length ? <div className="te-state"><h3>No stored HTTP server spans returned</h3><p>Confirm telemetry is arriving for this application. Data may also have expired under retention.</p></div>
