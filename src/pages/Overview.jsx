@@ -1,3 +1,4 @@
+import { Help } from './LearnMonitoring'
 import { Activity, ArrowRight, BookOpen, Check, Clock3, Code2, Coffee, Layers, Lightbulb, Network, PlusCircle, RefreshCw, Rocket, Terminal, UserRound, Zap } from 'lucide-react'
 import { summarizeWorkspace } from '../lib/workspaceOverview.js'
 
@@ -14,7 +15,7 @@ export default function Overview({ state, onRefresh, onApplications }) {
     [UserRound, 'Personal', 'Workspace', 'Your account', 'purple'],
   ]
   return <>
-    <section className="ws-welcome"><span className="ws-badge ws-purple"><span className="ws-dot"/>Your workspace</span><h1>Welcome to Your Monitoring Workspace</h1><p>Register your application and monitor authenticated OpenTelemetry HTTP server spans.</p></section>
+    <section className="ws-welcome"><span className="ws-badge ws-purple"><span className="ws-dot"/>Your workspace</span><h1>Welcome to Your Monitoring Workspace <Help term="Application monitoring"/></h1><p>Register your application and monitor authenticated OpenTelemetry HTTP server spans.</p></section>
     <div className="ws-overview-refresh"><span>{state.refreshing ? 'Updating workspace…' : 'Private applications and telemetry from your account'}</span><button className="ws-secondary" onClick={onRefresh} disabled={state.refreshing}><RefreshCw size={16}/>{state.refreshing ? 'Refreshing…' : 'Refresh'}</button></div>
     {state.loading && <p role="status" className="ws-notice">Loading your applications and telemetry…</p>}
     {state.error && <div role="alert" className="ws-error">Unable to load applications: {state.error} <button className="ws-secondary" onClick={onRefresh}>Retry</button></div>}

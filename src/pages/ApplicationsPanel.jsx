@@ -1,29 +1,15 @@
+import { Help } from './LearnMonitoring'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { Activity, CheckCircle2, ClipboardCopy, CloudUpload, PlusCircle, RefreshCw, ShieldCheck, Terminal, TriangleAlert } from 'lucide-react'
+import { Activity, CheckCircle2, CloudUpload, PlusCircle, RefreshCw, ShieldCheck, Terminal, TriangleAlert } from 'lucide-react'
 import './ApplicationsPanel.css'
 import { monitoringRequest } from '../lib/monitoringApi.js'
-import { envSnippet, powershellSnippet, OTEL_INSTALL, OTEL_START } from '../lib/otelSetup'
+import IntegrationSetup from './IntegrationSetup'
 import { createApplicationDetails, connectionMessage } from '../lib/applicationDetails.js'
 import ProjectKeys from './ProjectKeys'
 import ApplicationSelector from './ApplicationSelector'
 
 // Share the existing HttpOnly session and CSRF lifecycle used by sign-in.
 const request = (_user, path, options = {}) => monitoringRequest(path, options)
-
-function Snippet({ title, code, disabled = false }) {
-  const [copied, setCopied] = useState(false)
-  async function copy() {
-    if (disabled) return
-    try {
-      await navigator.clipboard.writeText(code)
-      setCopied(true)
-    } catch { setCopied(false) }
-  }
-  return <section className="to-app-snippet">
-    <div className="to-app-snippet-heading"><strong>{title}</strong><button type="button" onClick={copy} disabled={disabled}><ClipboardCopy size={15}/>{copied ? 'Copied' : 'Copy'}</button></div>
-    <pre><code>{code}</code></pre>
-  </section>
-}
 
 function friendlyDate(value) {
   if (!value) return 'No events received yet'
@@ -126,13 +112,11 @@ export default function ApplicationsPanel({ user, projectStore, projectState, se
       setBusy('')
     }
   }
-  const setup = { name: selected?.name || 'shopping-api', endpoint: selected?.ingest_url, secret: newSecret || 'YOUR_PROJECT_SECRET' }
-  const envText = envSnippet(setup)
   const currentStatus = details.status
   const connectionError = details.statusError
 
   return <div className="to-app-panel">
-    <header className="to-app-heading"><div><span className="ws-badge ws-purple">OpenTelemetry • Node.js</span><h1>Applications</h1><p>Connect your existing backend without uploading its source code.</p></div><Activity size={29}/></header>
+    <header className="to-app-heading"><div><span className="ws-badge ws-purple">OpenTelemetry • Node.js</span><h1>Applications <Help term="OpenTelemetry and instrumentation"/></h1><p>Connect your existing backend without uploading its source code.</p></div><Activity size={29}/></header>
     {error && <div className="to-app-error" role="alert"><TriangleAlert size={18}/><span>{error}</span></div>}
     {projectState.error && <div className="to-app-error" role="alert"><span>{projectState.error}</span><button className="ws-secondary" onClick={projectStore.refresh}>Retry applications</button></div>}
     {loading ? <section className="ws-card to-app-card">Loading your applications…</section> : <>
@@ -160,19 +144,8 @@ export default function ApplicationsPanel({ user, projectStore, projectState, se
               pendingRevoke={pendingRevoke?.projectId === currentId ? pendingRevoke.keyId : null}
               onRevoke={id => setPendingRevoke({projectId: currentId, keyId: id})}
               onConfirmRevoke={revokeKey} onCancelRevoke={() => setPendingRevoke(null)} />
-            <section className="ws-card to-app-card"><h2>3. Install OpenTelemetry</h2><p>Run this inside the existing Node.js backend folder.</p>
-              <Snippet title="Terminal · Node.js 22.15+" code={OTEL_INSTALL}/>
-            </section>
-            <section className="ws-card to-app-card"><h2>4. Configure the backend</h2><p>Add these values to the backend's <code>.env</code> file. The endpoint below comes from your T.O. API configuration.</p>
-              <p className="to-app-small">Enable HTTP, Express and mysql2 together to correlate supported MySQL operations with requests. Dependency storage requires advanced tracing on the receiver. Background database activity does not establish an HTTP connection.</p>
-              <Snippet title="Backend .env — keep private" code={envText} disabled={!hasIngest}/>
-              <details><summary>Windows PowerShell alternative</summary><Snippet title="PowerShell · current session" code={powershellSnippet(setup)} disabled={!hasIngest}/></details>
-              {!hasIngest && <p className="to-app-small">Ingestion URL is not configured on the backend. Configure <code>MONITORING_PUBLIC_OTLP_TRACES_URL</code> before connecting.</p>}
-            </section>
-            <section className="ws-card to-app-card"><h2>5. Start your Node.js application</h2><p>For a CommonJS Express service using Node.js 22+, run:</p>
-              <Snippet title="Terminal" code={OTEL_START}/>
-              <p className="to-app-small">Replace <code>server.cjs</code> with your CommonJS entry file. With PowerShell environment variables, omit <code>--env-file=.env</code>. Call an Express route, allow a few seconds for batch export, then check the connection. ESM instrumentation needs separate loader setup. Only HTTP/JSON traces are supported; protobuf, logs, and metrics are unavailable.</p>
-            </section>
+            <IntegrationSetup key={currentId} name={selected.name} endpoint={selected.ingest_url} disabled={!hasIngest}/>
+            {!hasIngest && <p role="status">The ingestion endpoint is unavailable. Ask the administrator to configure the existing public OTLP URL.</p>}
             <section className="ws-card to-app-card to-app-status"><div className="to-app-status-top"><h2>Connection status</h2><button className="ws-secondary" type="button" onClick={detailsStore.refresh} disabled={details.statusLoading || details.keysLoading}><RefreshCw size={15}/>{details.statusLoading ? 'Checking…' : 'Check connection'}</button></div>
               <div className={connectionError ? 'to-app-error' : currentStatus?.connected ? 'to-app-connected' : 'to-app-pending'} role={connectionError ? 'alert' : 'status'}>{currentStatus?.connected ? <CheckCircle2 size={21}/> : <CloudUpload size={21}/>} {connectionMessage(details)}</div>
               <p>HTTP telemetry: {currentStatus ? friendlyDate(currentStatus.last_seen_at) : 'Receipt is not yet verified'}</p>

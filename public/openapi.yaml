@@ -2,11 +2,14 @@ openapi: 3.1.0
 info:
   title: T.O. Monitoring API
   version: 1.0.0-pilot
-  summary: Personal-project management and OpenTelemetry HTTP trace ingestion
+  summary: Personal-project management and allowlisted OpenTelemetry HTTP and database traces
   description: >-
     Personal project management and OTLP/HTTP JSON traces implemented in the existing Express backend.
     Deployment and reviewed Monitoring migrations are required before use. Existing T.O. login sessions are
-    reused. Team membership, protobuf, gRPC, metrics, and logs are planned and unavailable.
+    reused. Default ingestion accepts HTTP SERVER spans; enabled advanced tracing additionally accepts
+    supported HTTP CLIENT and database CLIENT spans. MongoDB metadata is allowlisted, but integration
+    readiness is documented separately in the developer guides. Team membership, protobuf, gRPC, metrics,
+    and logs are planned and unavailable. Management and ingestion each allow 120 requests/IP/minute.
 servers:
   - url: https://to-backendapi-v1-kctb.onrender.com
     description: Existing shared Render backend
@@ -248,8 +251,10 @@ paths:
         - Telemetry
       summary: Check whether recent traces have arrived
       description: >-
-        connected means a trace was received in the last 10 minutes; has_received means any trace has ever
-        been stored.
+        connected and http_active mean an eligible HTTP SERVER span was received within the last 10 minutes.
+        has_received means retained HTTP SERVER data exists; it is not an all-time history guarantee.
+        Database activity is separate and never marks HTTP connected. availability is always unknown.
+        span_count counts retained HTTP SERVER spans, not database operations.
       security:
         - userSession: []
         - sessionCookie: []
@@ -280,6 +285,27 @@ paths:
                   span_count:
                     type: integer
                     minimum: 0
+                  http_last_seen_at:
+                    type: [string, 'null']
+                    format: date-time
+                  http_active:
+                    type: boolean
+                  database_last_seen_at:
+                    type: [string, 'null']
+                    format: date-time
+                    description: Most recent retained database CLIENT receipt, or null without advanced reads.
+                  database_active:
+                    type: boolean
+                  telemetry_last_seen_at:
+                    type: [string, 'null']
+                    format: date-time
+                    description: Project receipt timestamp; can include database activity.
+                  availability:
+                    type: string
+                    const: unknown
+                  activity_window_seconds:
+                    type: integer
+                    const: 600
                   retention_days:
                     type: integer
                     const: 7
@@ -322,7 +348,7 @@ paths:
             pattern: '^[0-9a-f]{32}$'
       responses:
         '200':
-          description: Stored HTTP server spans
+          description: Latest HTTP SERVER spans, or returned SERVER/CLIENT spans for an exact project-scoped trace
           content:
             application/json:
               schema:
@@ -347,6 +373,71 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /api/monitoring/projects/{id}/database-insights:
+    get:
+      tags: [Telemetry]
+      summary: Bounded stored database-span statistics (feature-gated)
+      description: >-
+        Requires both advanced reads and MONITORING_DATABASE_INSIGHTS_ENABLED=true; otherwise 404.
+        Computes backend statistics over the newest up to 1000 stored database CLIENT operations
+        within the requested start-time range, independently of Trace Explorer. This is a bounded
+        subset, not complete production metrics. Sampling, retention and response caps apply.
+        Recorded error rate is a lower bound; unflagged outcomes are unknown. Review the proposed
+        performance index before rollout. Percentiles use linear interpolation and small samples warn.
+      security:
+        - userSession: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - in: query
+          name: hours
+          schema: {type: integer, enum: [1, 24, 168], default: 24}
+        - in: query
+          name: threshold
+          schema: {type: number, minimum: 1, maximum: 86400000, default: 500}
+        - in: query
+          name: system
+          schema: {type: string, enum: [mysql, postgresql, sqlite, redis, mongodb]}
+        - in: query
+          name: service
+          schema: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.-]{0,99}$'}
+      responses:
+        '200':
+          description: Bounded stored-operation statistics and hourly buckets; missing buckets are not zero latency
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DatabaseStatistics'
+                  - type: object
+                    properties:
+                      start: {type: string, format: date-time}
+                      end: {type: string, format: date-time}
+                      threshold_ms: {type: number}
+                      possibly_truncated: {type: boolean}
+                      limit: {type: integer, const: 1000}
+                      scope: {type: string}
+                      trends:
+                        type: array
+                        maxItems: 169
+                        items:
+                          allOf:
+                            - $ref: '#/components/schemas/DatabaseStatistics'
+                            - type: object
+                              properties:
+                                at: {type: string, format: date-time}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /otlp/v1/traces:
     post:
       tags:
@@ -354,10 +445,22 @@ paths:
       summary: Receive OTLP/HTTP-JSON traces from Node.js OpenTelemetry
       description: >-
         Send-only x-to-project-key required. Only eligible HTTP SERVER spans and whitelisted attributes are
-        stored. 256 KB decompressed body, 100 input spans per request, 600 newly stored spans/project/minute,
+        stored in default mode. With MONITORING_ADVANCED_TRACES_ENABLED=true and
+        MONITORING_ADVANCED_TRACES_INGEST_ENABLED not false, eligible HTTP SERVER/CLIENT and database
+        CLIENT spans are accepted using the reviewed advanced schema. Database systems mysql, postgresql,
+        sqlite, redis and mongodb are allowlisted; this does not certify every driver integration.
+        Names are synthesized from allowlisted operations; unsupported names become query. INTERNAL
+        spans are excluded without rewriting parent IDs. SQL/query text, MongoDB contents, credentials,
+        database/collection identifiers, raw messages, stacks, headers and arbitrary attributes are discarded.
+        The recommended privacy preload also removes private fields before export.
+        256 KB decompressed body, 100 input spans per request, 600 newly stored spans/project/minute,
         120 requests/IP/minute. Official SDK setup must set http/json and OTEL_BSP_MAX_EXPORT_BATCH_SIZE=100.
         Duplicate IDs are ignored. Key validation, quota, writes, and last-received update are transactional.
-        Seven-day retention; pruning runs in bounded batches every minute while the backend is running.
+        Seven-day retention by received_at; pruning runs in bounded batches every minute while the backend
+        is running, so expiry is asynchronous. Advanced spans must start within the last seven days,
+        end no more than five minutes in the future, and last at most 24 hours. At most 10 resources,
+        25 scopes per resource, 64 attributes per object and 16 events per span are accepted.
+        HTTP SERVER receipt alone establishes HTTP connection state; startup database spans do not.
         Protobuf and gRPC are unavailable.
       security:
         - projectIngestKey: []
@@ -387,7 +490,7 @@ paths:
                 example: {}
           headers:
             X-TO-Stored-Spans:
-              description: New eligible spans persisted; duplicates and excluded spans do not advance connection status
+              description: New eligible spans persisted, including advanced database spans. Duplicates/excluded spans do not count; only stored HTTP SERVER spans establish HTTP activity.
               schema:
                 type: integer
                 minimum: 0
@@ -628,6 +731,7 @@ components:
             - 'null'
         span_error:
           type: boolean
+          description: Recorded error flag. False does not establish success because explicit OK status is not retained.
         parent_span_id:
           type: [string, 'null']
           description: Advanced mode only; the parent may be excluded or sampled out.
@@ -648,7 +752,23 @@ components:
           enum: [mysql, postgresql, sqlite, redis, mongodb, null]
         db_operation:
           type: [string, 'null']
-          description: Allowlisted operation or generic query; never SQL text.
+          description: Explicit current db.operation.name or legacy db.operation mapped to this allowlist, otherwise query. Never parsed from SQL or query contents.
+          enum: [SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, BEGIN, COMMIT, ROLLBACK, GET, SET, DEL, FIND, FINDONE, AGGREGATE, COUNT, PING, EXECUTE, query, null]
         error_type:
           type: [string, 'null']
           description: Allowlisted error class or generic Error; no messages or stacks.
+          enum: [Error, TypeError, RangeError, SyntaxError, ReferenceError, TimeoutError, AbortError, ECONNREFUSED, ECONNRESET, ETIMEDOUT, ENOTFOUND, timeout, null]
+    DatabaseStatistics:
+      type: object
+      properties:
+        count: {type: integer, minimum: 0, maximum: 1000}
+        duration_sample_size: {type: integer, minimum: 0, maximum: 1000}
+        average_ms: {type: [number, 'null']}
+        p50_ms: {type: [number, 'null']}
+        p95_ms: {type: [number, 'null']}
+        p99_ms: {type: [number, 'null']}
+        recorded_error_count: {type: integer, minimum: 0}
+        recorded_error_rate: {type: [number, 'null'], minimum: 0, maximum: 1}
+        unknown_outcome_count: {type: integer, minimum: 0}
+        slow_count: {type: integer, minimum: 0}
+        insufficient_data: {type: boolean}

@@ -56,3 +56,17 @@ test('trace detail reports loading, unsupported reads, expiration and absence of
   assert.match(renderDetail({ spans: [] }), /No spans returned for this trace/)
   assert.match(renderDetail({}), /does not prove the request had no dependencies/)
 })
+
+
+test('request education renders safe unknown outcomes, visible timing bars and native keyboard controls', async () => {
+  const { RequestInsights } = await vite.ssrLoadModule('/src/pages/DatabaseInsights.jsx')
+  const { default: Learn, Help } = await vite.ssrLoadModule('/src/pages/LearnMonitoring.jsx')
+  const child = { ...span, span_id:'2'.repeat(16), span_kind:'CLIENT', db_system:'mysql', db_operation:'query', http_method:null, duration_ms:600, parent_span_id:'9'.repeat(16) }
+  const html = renderToStaticMarkup(createElement(RequestInsights,{spans:[span,child],projectId:'mafa',truncated:true}))
+  for (const text of ['Slow database call','Unknown','Browser-only','Parent span not returned','role="img"','<summary>','response limit','HTTP request']) assert.ok(html.includes(text),text)
+  assert.ok(!html.includes('Success'))
+  const help = renderToStaticMarkup(createElement(Help,{term:'Database latency'}))
+  for (const text of ['aria-label="Learn about Database latency"','Why it matters','Example:','Investigate:']) assert.ok(help.includes(text),text)
+  const glossary = renderToStaticMarkup(createElement(Learn))
+  for (const text of ['type="search"','P95 and P99','HTTP status codes','N+1 query patterns','Correlation and causation']) assert.ok(glossary.includes(text),text)
+})

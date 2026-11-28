@@ -3,6 +3,8 @@ import { Activity, RefreshCw, X } from 'lucide-react'
 import ApplicationSelector from './ApplicationSelector'
 import { createTraceExplorerStore, defaultFilters, filterSpans, spanTime, traceForest } from '../lib/traceExplorer.js'
 import './TraceExplorer.css'
+import { RequestInsights } from './DatabaseInsights'
+import { Help } from './LearnMonitoring'
 
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : 'Unavailable'
 const duration = value => value == null ? 'Unavailable' : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(value)} ms`
@@ -33,7 +35,7 @@ export function TraceExplorerView({ projectState, currentId, state, filters = de
   const project = projectState.projects.find(item => item.id === currentId)
   const projectsPartial = projectState.applicationCount === null && projectState.projects.length === 100 || projectState.applicationCount > projectState.projects.length
   return <div className="trace-explorer">
-    <header className="te-heading"><div><span className="ws-badge ws-purple"><Activity size={14}/>OpenTelemetry traces</span><h1>Trace Explorer</h1><p>Inspect real HTTP requests and their available spans.</p></div><button className="ws-secondary" disabled={!currentId || list.loading || !!projectState.error} onClick={onRefresh}><RefreshCw size={16}/>{list.loading ? 'Loading…' : 'Refresh traces'}</button></header>
+    <header className="te-heading"><div><span className="ws-badge ws-purple"><Activity size={14}/>OpenTelemetry traces</span><h1>Trace Explorer <Help term="Trace IDs and span IDs"/></h1><p>Inspect real HTTP requests and their available spans.</p></div><button className="ws-secondary" disabled={!currentId || list.loading || !!projectState.error} onClick={onRefresh}><RefreshCw size={16}/>{list.loading ? 'Loading…' : 'Refresh traces'}</button></header>
     {projectState.error ? <div className="ws-error" role="alert">Applications could not be loaded: {projectState.error} <button className="ws-secondary" onClick={onRefreshProjects}>Retry applications</button></div>
       : projectState.loading ? <section className="ws-card te-state" role="status">Loading your applications…</section>
         : !projectState.projects.length ? <section className="ws-card te-state"><h2>No applications registered</h2><p>Register an application to explore its HTTP traces.</p><button className="ws-primary" onClick={onApplications}>Manage Applications</button></section>
@@ -57,14 +59,14 @@ export function TraceExplorerView({ projectState, currentId, state, filters = de
                     : list.loaded && !rows.length ? <div className="te-state"><h3>No loaded spans match these filters</h3><p>This does not prove there are no matches outside the returned batch.</p><button className="ws-secondary" onClick={onReset}>Reset filters</button></div>
                       : rows.length > 0 && <div className="te-table-wrap" tabIndex={0} aria-label="Scrollable trace results"><table className="te-table"><caption className="te-sr-only">Loaded HTTP server spans for {project?.name}</caption><thead><tr><th scope="col">Timestamp</th><th scope="col">Service</th><th scope="col">Request / normalized endpoint</th><th scope="col">Status</th><th scope="col">Duration</th><th scope="col">Error</th><th scope="col">Trace</th></tr></thead><tbody>{rows.map(span => <tr key={`${span.trace_id}:${span.span_id}`}><td><time dateTime={span.started_at || span.received_at}>{date(span.started_at || span.received_at)}</time></td><td>{span.service_name}</td><td><strong className="te-method">{span.http_method || '—'}</strong><code>{span.http_route || 'Route unavailable'}</code></td><td><Status span={span}/></td><td className="te-number">{duration(span.duration_ms)}</td><td>{span.span_error ? <span className="te-error">Error</span> : <span aria-label="No error flag">—</span>}</td><td><button className="te-trace-link" onClick={event => onOpen(span.trace_id, event)} aria-label={`Open trace ${span.trace_id}`}><code>{span.trace_id.slice(0, 12)}…</code></button></td></tr>)}</tbody></table></div>}
             </section>
-            {detail.traceId && <TraceDetail detail={detail} onRetry={() => onOpen(detail.traceId)} onClose={onClose}/>}
+            {detail.traceId && <TraceDetail key={`${currentId}:${detail.traceId}`} projectId={currentId} detail={detail} onRetry={() => onOpen(detail.traceId)} onClose={onClose}/>}
           </>}
   </div>
 }
 
 function Status({ span }) { return <span className={`te-status ${span.http_status >= 500 ? 'te-error' : span.http_status >= 400 ? 'te-amber' : ''}`}>{span.http_status ?? '—'}</span> }
 
-export function TraceDetail({ detail, onRetry, onClose }) {
+export function TraceDetail({ projectId, detail, onRetry, onClose }) {
   const heading = useRef(null)
   useEffect(() => { heading.current?.focus() }, [detail.traceId])
   const forest = traceForest(detail.spans)
@@ -82,7 +84,7 @@ export function TraceDetail({ detail, onRetry, onClose }) {
         : detail.loaded && !detail.spans.length ? <p className="te-state">No spans returned for this trace. It may have expired or no longer be available.</p>
           : <>
             {!hasClient && detail.loaded && <p className="te-scope">No dependency spans returned. Only available spans are shown; this does not prove the request had no dependencies.</p>}
-            <ol className="te-span-tree" aria-label="Available span hierarchy">{forest.map(({ span, depth, missingParent, detached }) => {
+            <RequestInsights spans={detail.spans} projectId={projectId} truncated={detail.truncated}/><ol className="te-span-tree" aria-label="Available span hierarchy">{forest.map(({ span, depth, missingParent, detached }) => {
               const left = Math.max(0, Math.min(100, (spanTime(span) - start) / window * 100)) || 0
               const width = Math.max(0.6, Math.min(100 - left, (span.duration_ms || 0) / window * 100))
               return <li key={span.span_id} className="te-span" style={{ '--te-depth': Math.min(depth, 8) }}>
